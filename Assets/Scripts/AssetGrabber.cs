@@ -8,8 +8,6 @@ using UnityEngine;
  */
 public class AssetGrabber : MonoBehaviour {
 
-	public GameObject cube; //temp
-
 	//Url to get html from
 	public string url;
 
@@ -25,6 +23,7 @@ public class AssetGrabber : MonoBehaviour {
 	//If the link contains any of these then we will not recursively call it
 	private string[] restrictedLinkExtensions = new string[] {".js", ".css"};
 
+	//How many subpages do we want to process?
 	private int maxRecursiveCalls = 10;
 
 	/*******************************************************************************************************************************/
@@ -41,6 +40,7 @@ public class AssetGrabber : MonoBehaviour {
 	//Has OnDownloadComplete been called yet?
 	private bool downloadProcessed = false;
 
+	//The number of subpages that have been processed
 	private int numberOfRecursiveCalls = 0;
 
 	/*******************************************************************************************************************************/
@@ -67,17 +67,7 @@ public class AssetGrabber : MonoBehaviour {
 	 * Called when the downloads are all complete
 	 */
 	public void OnDownloadComplete(){
-		int x = 0;
-		int y = 0;
-		foreach(Texture2D tex in textures){
-			GameObject spawned = (GameObject)Instantiate (cube, new Vector3(x++, y,0), new Quaternion(0,0,180,0));
-			spawned.GetComponent<Renderer> ().material.mainTexture = tex;
-			spawned.GetComponent<Renderer> ().material.shader = Shader.Find ("Unlit/Texture");
-			if (x > 25) {
-				x = 0;
-				y++;
-			}
-		}
+		GetComponent<TextureAssembler> ().StartProcessing (textures);
 	} //End of OnDownloadComplete
 
 
@@ -171,7 +161,6 @@ public class AssetGrabber : MonoBehaviour {
 
 						//Start the coroutine to save the texture
 						StartCoroutine (GrabTexture (link));
-
 					}
 				}
 			}
