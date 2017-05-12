@@ -17,10 +17,23 @@ public class AssetGrabber : MonoBehaviour {
 	private string[] linkStarters = new string[] {"href=", "src="};
 
 	//If the link contains any of these then it must be an image
-	private string[] imageExtensions = new string[] {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".img", ".tiff"};
+	private string[] imageExtensions = new string[] {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".img", ".tiff", ".ico"};
+
+	//If the link contains any of these then we don't want to try and load this texture.
+	private string[] restrictedImageExtensions = new string[] {".gifv", "domain/"};
+
+	//If the link contains any of these then we will not recursively call it
+	private string[] restrictedLinkExtensions = new string[] {".js", ".css"};
+
+	private int maxRecursiveCalls = 10;
+
+	/*******************************************************************************************************************************/
 
 	//All the textures found from the webpage and child pages
 	private ArrayList textures = new ArrayList ();
+
+	//All the links to the textures found from the webpage and child pages
+	private ArrayList textureLinks = new ArrayList ();
 
 	//The number of items currently being downloaded
 	private int currentlyDownloading = 0;
@@ -28,12 +41,14 @@ public class AssetGrabber : MonoBehaviour {
 	//Has OnDownloadComplete been called yet?
 	private bool downloadProcessed = false;
 
+	private int numberOfRecursiveCalls = 0;
+
 	/*******************************************************************************************************************************/
 
 	/*
 	 * Unity Update function
 	 */
-	public void Update(){
+	public void Update(){		
 		CheckForDownloadComplete ();
 
 	} //End of Update
@@ -53,10 +68,15 @@ public class AssetGrabber : MonoBehaviour {
 	 */
 	public void OnDownloadComplete(){
 		int x = 0;
+		int y = 0;
 		foreach(Texture2D tex in textures){
-			GameObject spawned = (GameObject)Instantiate (cube, new Vector3(x++, 0,0), new Quaternion(0,0,180,0));
+			GameObject spawned = (GameObject)Instantiate (cube, new Vector3(x++, y,0), new Quaternion(0,0,180,0));
 			spawned.GetComponent<Renderer> ().material.mainTexture = tex;
 			spawned.GetComponent<Renderer> ().material.shader = Shader.Find ("Unlit/Texture");
+			if (x > 25) {
+				x = 0;
+				y++;
+			}
 		}
 	} //End of OnDownloadComplete
 
@@ -84,7 +104,9 @@ public class AssetGrabber : MonoBehaviour {
 		WWW www = new WWW (url);
 		yield return www;
 
-		ProcessWWW (www, recursive);
+		if (www.error == null) {
+			ProcessWWW (www, recursive);
+		}
 
 	} //End of ExtractFromURL
 
@@ -128,7 +150,11 @@ public class AssetGrabber : MonoBehaviour {
 				if (endQuote >= 1 && endQuote - startQuote > 6) {
 
 					//Add the link to the arraylist, trimming out the quotations and other junk characters.
-					allLinks.Add (line.Substring (startQuote + 1, endQuote - startQuote - 1));
+					string link = CleanupLink(line.Substring (startQuote + 1, endQuote - startQuote - 1));
+
+					if (IsValidURL (link)) {
+						allLinks.Add (link);
+					}
 				}
 			}
 		}
@@ -136,37 +162,55 @@ public class AssetGrabber : MonoBehaviour {
 		//Sort out the images from the page links
 		foreach (string link in allLinks) {
 
-			//Try each image type
-			foreach (string ext in imageExtensions) {
+			if(!ContainsExtension(link, restrictedImageExtensions) && ContainsExtension(link, imageExtensions)){
 
-				//If the string has the extension then this is an image
-				if (link.ToUpper().Contains (ext.ToUpper())) {
-
-					//Make sure we aren't storing duplicates
-					if (images.Contains (link) == false) {
+				//Make sure we aren't storing duplicates
+				if (images.Contains (link) == false) {					
+					if (textureLinks.Contains (link) == false) {
 						images.Add (link);
 
 						//Start the coroutine to save the texture
-
-
-						StartCoroutine(GrabTexture(link));
+						StartCoroutine (GrabTexture (link));
 
 					}
+				}
+			}
 
-				} 
+			//This must be a page link
+			else {
 
-				//This must be a page link
-				else {
+				//Don't store duplicate links
+				if (links.Contains (link) == false) {
+					links.Add (link);
 
-					//Don't store duplicate links
-					if (links.Contains (link) == false) {
-						links.Add (link);
+					//If this is the first call, then call on subpages 
+					if (numberOfRecursiveCalls < maxRecursiveCalls && recursive && !ContainsExtension(link, restrictedLinkExtensions)) {
+						numberOfRecursiveCalls++;
+
+						StartCoroutine (ExtractFromUrl (link, false));
 					}
 				}
 			}
 		}
 
 	} //End of ProcessWWW
+
+
+	/*
+	 * Return true if any key is a substring of haystack.
+	 */
+	private bool ContainsExtension(string haystack, string[] key){
+		//Try each image type
+		foreach (string ext in key) {
+
+			//If the string has the extension then this is an image
+			if (haystack.ToUpper().Contains (ext.ToUpper())) {
+				return true;
+			} 					
+		}
+
+		return false;
+	} //End of ContainsExtension
 		
 
 	/*
@@ -182,9 +226,37 @@ public class AssetGrabber : MonoBehaviour {
 
 		if (www.error == null) {
 			textures.Add (www.texture);
+			textureLinks.Add (link);
 		}
 
 	} //End of GrabTexture
 
+
+	/*
+	 * Misc cleanup for a link.
+	 */
+	private string CleanupLink(string link){
+		while (link [0] == '/') {
+			link = link.Substring (1);
+		}
+
+		return link;
+	} //End of CleanupLink
+
+
+	/*
+	 * Misc checks for a valid url.
+	 */
+	private bool IsValidURL(string link){
+		if (link [0] == '#') {
+			return false;
+		}
+
+		if (link.Contains (".") == false) {
+			return false;
+		}
+
+		return true;
+	} //End of IsValidURL
 }
 	
